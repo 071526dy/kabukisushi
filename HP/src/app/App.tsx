@@ -3,6 +3,7 @@ import { LandingPage } from './pages/LandingPage';
 import { AdminLayout } from './admin/layouts/AdminLayout';
 import { DashboardPage } from './admin/pages/DashboardPage';
 import { LoginPage } from './admin/pages/LoginPage';
+import { EditorPage } from './admin/pages/EditorPage';
 import { DataProvider } from '../contexts/DataContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ProtectedRoute } from './admin/components/shared/ProtectedRoute';
@@ -18,6 +19,11 @@ export default function App() {
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<LoginPage />} />
+            <Route path="/admin/editor" element={
+              <ProtectedRoute>
+                <EditorPage />
+              </ProtectedRoute>
+            } />
 
             <Route path="/admin" element={
               <ProtectedRoute>

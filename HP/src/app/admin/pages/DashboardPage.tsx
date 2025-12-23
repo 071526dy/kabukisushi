@@ -1,8 +1,10 @@
 import { useData } from '../../../contexts/DataContext';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { LayoutDashboard, UtensilsCrossed, Image, TrendingUp } from 'lucide-react';
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { menuItems, galleryImages, analytics } = useData();
 
   const stats = [
@@ -73,7 +75,12 @@ export function DashboardPage() {
               <h3 className="font-bold text-gray-900">KABUKI寿司 1番通り店</h3>
               <p className="text-xs text-gray-500 mt-1">最終更新: 6時間前</p>
               <div className="mt-4 flex gap-2">
-                <button className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors">編集</button>
+                <button
+                  onClick={() => window.location.href = '/editor_mock.html'}
+                  className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  編集
+                </button>
                 <button className="px-3 py-2 border border-gray-200 text-gray-600 text-sm rounded-lg hover:bg-gray-50 transition-colors">統計</button>
               </div>
             </div>
@@ -144,8 +151,8 @@ export function DashboardPage() {
               {analytics.recentUpdates.map((update, index) => (
                 <div key={index} className="flex items-start gap-3 pb-4 border-b last:border-0">
                   <div className={`w-2 h-2 rounded-full mt-2 ${update.type === 'menu' ? 'bg-purple-600' :
-                      update.type === 'gallery' ? 'bg-orange-600' :
-                        'bg-blue-600'
+                    update.type === 'gallery' ? 'bg-orange-600' :
+                      'bg-blue-600'
                     }`} />
                   <div className="flex-1">
                     <p className="text-sm text-gray-900">{update.description}</p>
