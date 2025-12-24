@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, CloudUpload, Folder, Archive, Check, Trash2, Search, ChevronRight, Video, Plus } from 'lucide-react';
 
 interface ImageAssetLibraryProps {
@@ -12,6 +12,7 @@ type TabType = 'upload' | 'uploaded' | 'library';
 export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAssetLibraryProps) {
     const [activeTab, setActiveTab] = useState<TabType>('upload');
     const [searchQuery, setSearchQuery] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     if (!isOpen) return null;
 
@@ -33,6 +34,20 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
         "https://uploads.strikinglycdn.com/static/backgrounds/abstract/t65.jpg",
         "https://uploads.strikinglycdn.com/static/backgrounds/abstract/t66.jpg",
     ];
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            // In a real app, you would upload to a server. 
+            // Here we create a local object URL for preview.
+            const url = URL.createObjectURL(file);
+            onSelect(url);
+        }
+    };
+
+    const handleBrowseClick = () => {
+        fileInputRef.current?.click();
+    };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -77,9 +92,19 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                             <div className="w-full max-w-2xl border-2 border-dashed border-gray-200 rounded-xl bg-white p-16 flex flex-col items-center text-center shadow-sm">
                                 <div className="text-xl font-bold text-gray-800 mb-2">ファイルをここへドラッグしてください</div>
                                 <div className="text-gray-400 mb-8 font-medium">もしくは</div>
-                                <button className="px-10 py-3 bg-[#88c057] hover:bg-[#7ab04a] text-white rounded-md font-bold text-sm shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 mb-8">
+                                <button
+                                    onClick={handleBrowseClick}
+                                    className="px-10 py-3 bg-[#88c057] hover:bg-[#7ab04a] text-white rounded-md font-bold text-sm shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 mb-8"
+                                >
                                     参照
                                 </button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleFileChange}
+                                    className="hidden"
+                                    accept="image/gif,image/jpeg,image/jpg,image/png,image/bmp,image/x-icon"
+                                />
 
                                 <div className="w-full max-w-md space-y-4">
                                     <div className="text-gray-400 text-xs font-bold uppercase tracking-wider">URLから直接アップロード</div>
