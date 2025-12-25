@@ -30,6 +30,7 @@ interface EditorState {
 
 type ToolType = 'none' | 'resize' | 'crop' | 'filter' | 'rotate' | 'draw' | 'text';
 type DrawMode = 'free' | 'line';
+type CropRatio = 'custom' | 'square' | '3:2' | '4:3' | '5:4' | '7:5' | '16:9';
 
 export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: ImageEditorModalProps) {
     const [history, setHistory] = useState<EditorState[]>([]);
@@ -60,6 +61,8 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     const imageRef = useRef<HTMLImageElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState<{ x: number, y: number } | null>(null);
+
+    const [cropRatio, setCropRatio] = useState<CropRatio>('custom');
 
     // Initialize history
     useEffect(() => {
@@ -443,6 +446,52 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                 </div>
             )}
 
+            {/* Crop Sub-Toolbar */}
+            {activeTool === 'crop' && (
+                <div className="h-[100px] bg-[#2d2d2d] border-b border-white/5 flex flex-col items-center justify-center gap-2 grow-in animate-in px-8">
+                    <div className="flex items-center gap-6">
+                        {[
+                            { id: 'square', label: '四角', icon: <div className="w-4 h-4 border-2 border-current" /> },
+                            { id: '3:2', label: '3:2', icon: <div className="w-5 h-3.5 border-2 border-current" /> },
+                            { id: '4:3', label: '4:3', icon: <div className="w-4.5 h-3.5 border-2 border-current" /> },
+                            { id: '5:4', label: '5:4', icon: <div className="w-4 h-3.5 border-2 border-current" /> },
+                            { id: '7:5', label: '7:5', icon: <div className="w-4.5 h-3.5 border-2 border-current" /> },
+                            { id: '16:9', label: '16:9', icon: <div className="w-5 h-2.5 border-2 border-current" /> },
+                            { id: 'custom', label: 'カスタム', icon: <div className="w-4 h-4 border-2 border-dashed border-current" /> }
+                        ].map((preset) => (
+                            <button
+                                key={preset.id}
+                                onClick={() => setCropRatio(preset.id as CropRatio)}
+                                className={`flex flex-col items-center gap-1 transition-all group ${cropRatio === preset.id ? 'text-white' : 'text-gray-500 hover:text-gray-400'}`}
+                            >
+                                <div className={`w-10 h-10 rounded border flex items-center justify-center transition-all ${cropRatio === preset.id ? 'bg-[#93B719] border-[#93B719] text-white shadow-lg' : 'border-white/5 hover:border-white/10'}`}>
+                                    {preset.icon}
+                                </div>
+                                <span className="text-[10px] font-bold">{preset.label}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-1 border-t border-white/5 pt-2 w-full justify-center">
+                        <button
+                            onClick={() => setActiveTool('none')}
+                            className="text-[11px] font-bold text-white hover:text-[#93B719] transition-colors"
+                        >
+                            適用
+                        </button>
+                        <button
+                            onClick={() => {
+                                setCropRatio('custom');
+                                setActiveTool('none');
+                            }}
+                            className="text-[11px] font-bold text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                            取り消す
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Sub-Toolbar for Tools */}
             {activeTool === 'draw' && (
                 <div className="h-[100px] bg-[#2d2d2d] flex flex-col items-center justify-center gap-4 border-b border-white/5 shadow-inner grow-in animate-in">
@@ -600,6 +649,45 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                         onMouseUp={handleCanvasMouseUp}
                         onMouseLeave={handleCanvasMouseUp}
                     />
+
+                    {activeTool === 'crop' && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div
+                                className="border-2 border-[#93B719] shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] transition-all duration-300 relative"
+                                style={{
+                                    width: cropRatio === 'custom' || cropRatio === 'square' ? '70%' :
+                                        cropRatio === '16:9' ? '90%' : '80%',
+                                    aspectRatio: cropRatio === 'square' ? '1/1' :
+                                        cropRatio === '3:2' ? '3/2' :
+                                            cropRatio === '4:3' ? '4/3' :
+                                                cropRatio === '5:4' ? '5/4' :
+                                                    cropRatio === '7:5' ? '7/5' :
+                                                        cropRatio === '16:9' ? '16/9' : 'none',
+                                    height: cropRatio === 'custom' ? '70%' : 'auto'
+                                }}
+                            >
+                                {/* Crop Handles */}
+                                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute top-1/2 -translate-y-1/2 -left-1 w-2 h-4 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute top-1/2 -translate-y-1/2 -right-1 w-2 h-4 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-[#93B719] rounded-sm" />
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white border border-[#93B719] rounded-sm" />
+
+                                {/* Grid Lines */}
+                                <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 opacity-30">
+                                    <div className="border-r border-white" />
+                                    <div className="border-r border-white" />
+                                    <div className="border-b border-white" />
+                                    <div className="border-b border-white" />
+                                    <div className="border-b border-white col-span-3" />
+                                    <div className="border-b border-white col-span-3" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Status Bar / Info */}
