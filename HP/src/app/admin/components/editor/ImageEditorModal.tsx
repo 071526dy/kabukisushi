@@ -366,7 +366,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                             <span className="text-gray-500">色</span>
 
                             {showColorPicker && (
-                                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.3)] p-4 w-[280px] z-[120] animate-in slide-in-from-bottom-2">
+                                <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.3)] p-4 w-[280px] z-[120] animate-in slide-in-from-top-2">
                                     <div className="space-y-4">
                                         <div className="space-y-2">
                                             {colorPresets.map((row, i) => (
@@ -420,7 +420,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                                         </div>
                                     </div>
                                     {/* Arrow */}
-                                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
+                                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
                                 </div>
                             )}
                         </div>
