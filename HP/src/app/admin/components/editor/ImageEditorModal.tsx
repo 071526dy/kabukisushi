@@ -42,6 +42,12 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     const [drawMode, setDrawMode] = useState<DrawMode>('free');
     const [drawColor, setDrawColor] = useState('#00a9ff');
     const [brushSize, setBrushSize] = useState(12);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+
+    const colorPresets = [
+        ['#000000', '#333333', '#666666', '#999999', '#cccccc', '#eeeeee', '#ffffff', 'transparent'],
+        ['#ff3b30', '#ff9500', '#ffcc00', '#4cd964', '#007aff', '#5856d6', '#af52de', '#ff2d55']
+    ];
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -342,32 +348,81 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                             </button>
                         </div>
 
-                        {/* Color Picker */}
-                        <div className="flex flex-col items-center gap-1">
+                        {/* Color Picker Popover */}
+                        <div className="flex flex-col items-center gap-1 relative">
                             <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full border border-white/20 shadow-lg flex items-center justify-center relative overflow-hidden">
-                                    <div className="absolute inset-0" style={{ backgroundColor: drawColor }} />
-                                    <input
-                                        type="color"
-                                        value={drawColor}
-                                        onChange={(e) => setDrawColor(e.target.value)}
-                                        className="absolute inset-0 opacity-0 cursor-pointer"
-                                    />
-                                </div>
+                                <button
+                                    onClick={() => setShowColorPicker(!showColorPicker)}
+                                    className="w-8 h-8 rounded-full border border-white/20 shadow-lg flex items-center justify-center relative overflow-hidden transition-transform hover:scale-110 active:scale-95"
+                                >
+                                    <div className="absolute inset-0" style={{ backgroundColor: drawColor === 'transparent' ? 'white' : drawColor }} />
+                                    {drawColor === 'transparent' && (
+                                        <div className="absolute inset-0 bg-white flex items-center justify-center">
+                                            <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                        </div>
+                                    )}
+                                </button>
                             </div>
                             <span className="text-gray-500">色</span>
-                        </div>
 
-                        {/* Recent Colors */}
-                        <div className="flex items-center gap-1.5">
-                            {['#000000', '#ffffff', '#ff0000', '#0000ff', '#00ff00', '#ffff00', '#00a9ff'].map(c => (
-                                <button
-                                    key={c}
-                                    onClick={() => setDrawColor(c)}
-                                    className={`w-4 h-4 rounded-sm border ${drawColor === c ? 'border-white scale-125' : 'border-black/20'} transition-transform`}
-                                    style={{ backgroundColor: c }}
-                                />
-                            ))}
+                            {showColorPicker && (
+                                <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.3)] p-4 w-[280px] z-[120] animate-in slide-in-from-bottom-2">
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            {colorPresets.map((row, i) => (
+                                                <div key={i} className="flex justify-between">
+                                                    {row.map(color => (
+                                                        <button
+                                                            key={color}
+                                                            onClick={() => {
+                                                                setDrawColor(color);
+                                                                setShowColorPicker(false);
+                                                            }}
+                                                            className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 relative ${drawColor === color ? 'border-[#00a9ff] scale-110' : 'border-black/5'}`}
+                                                            style={{ backgroundColor: color === 'transparent' ? 'white' : color }}
+                                                        >
+                                                            {color === 'transparent' && (
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="h-px bg-gray-100" />
+
+                                        <div className="flex items-center gap-3 bg-gray-50 p-2 rounded border border-gray-200">
+                                            <div className="w-8 h-8 rounded-full border border-black/10 shadow-inner" style={{ backgroundColor: drawColor === 'transparent' ? 'white' : drawColor }}>
+                                                {drawColor === 'transparent' && (
+                                                    <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
+                                                        <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 flex items-center gap-1">
+                                                <span className="text-gray-400 text-sm font-medium">#</span>
+                                                <input
+                                                    type="text"
+                                                    value={drawColor.startsWith('#') ? drawColor.slice(1).toUpperCase() : ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9A-Fa-f]/g, '');
+                                                        if (val.length <= 6) {
+                                                            setDrawColor(`#${val}`);
+                                                        }
+                                                    }}
+                                                    placeholder="FFFFFF"
+                                                    className="w-full bg-transparent border-none p-0 text-sm font-bold text-gray-700 focus:ring-0 uppercase placeholder:text-gray-300"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* Arrow */}
+                                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
+                                </div>
+                            )}
                         </div>
                     </div>
 
