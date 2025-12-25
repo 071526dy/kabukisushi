@@ -27,6 +27,7 @@ interface EditorState {
     width?: number;
     height?: number;
     mode?: 'resize' | 'crop';
+    imageSrc?: string;
 }
 
 type ToolType = 'none' | 'resize' | 'crop' | 'filter' | 'rotate' | 'draw' | 'text';
@@ -36,10 +37,12 @@ type CropRatio = 'custom' | 'square' | '3:2' | '4:3' | '5:4' | '7:5' | '16:9';
 export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: ImageEditorModalProps) {
     const [history, setHistory] = useState<EditorState[]>([]);
     const [historyIndex, setHistoryIndex] = useState(-1);
+    const [currentImage, setCurrentImage] = useState(imageUrl);
     const [currentState, setCurrentState] = useState<EditorState>({
         rotation: 0,
         filter: 'none',
-        drawings: []
+        drawings: [],
+        imageSrc: imageUrl
     });
 
     const [activeTool, setActiveTool] = useState<ToolType>('none');
@@ -166,6 +169,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
             const prevState = history[historyIndex - 1];
             setHistoryIndex(historyIndex - 1);
             setCurrentState(prevState);
+            if (prevState.imageSrc) setCurrentImage(prevState.imageSrc);
             if (prevState.width) setResizeWidth(prevState.width.toString());
             if (prevState.height) setResizeHeight(prevState.height.toString());
         }
@@ -176,20 +180,23 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
             const nextState = history[historyIndex + 1];
             setHistoryIndex(historyIndex + 1);
             setCurrentState(nextState);
+            if (nextState.imageSrc) setCurrentImage(nextState.imageSrc);
             if (nextState.width) setResizeWidth(nextState.width.toString());
             if (nextState.height) setResizeHeight(nextState.height.toString());
         }
     };
 
     const handleReset = () => {
-        pushState({
+        const initialState: EditorState = {
             rotation: 0,
             filter: 'none',
             drawings: [],
-            width: parseInt(resizeWidth),
-            height: parseInt(resizeHeight),
-            mode: undefined
-        });
+            imageSrc: imageUrl
+        };
+        pushState(initialState);
+        setCurrentImage(imageUrl);
+        setCropRatio('custom');
+        setCropBox({ left: 15, top: 15, width: 70, height: 70 });
     };
 
     const handleRotate = () => {
@@ -272,12 +279,43 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
         // Update originalRatio so subsequent actions (like resize sync) work with new image base
         setOriginalRatio(roundedWidth / roundedHeight);
 
-        pushState({
-            ...currentState,
-            width: roundedWidth,
-            height: roundedHeight,
-            mode: 'crop'
-        });
+        // Create a temporary canvas to perform ACTUAL cropping
+        const canvas = document.createElement('canvas');
+        canvas.width = roundedWidth;
+        canvas.height = roundedHeight;
+        const ctx = canvas.getContext('2d');
+
+        if (ctx && imageRef.current) {
+            let sx = 0, sy = 0, sw = width, sh = height;
+
+            if (cropRatio === 'custom') {
+                sx = (width * cropBox.left) / 100;
+                sy = (height * cropBox.top) / 100;
+                sw = (width * cropBox.width) / 100;
+                sh = (height * cropBox.height) / 100;
+            } else {
+                // Preset ratios: center crop
+                if (width / height > (roundedWidth / roundedHeight)) {
+                    sw = height * (roundedWidth / roundedHeight);
+                    sx = (width - sw) / 2;
+                } else {
+                    sh = width / (roundedWidth / roundedHeight);
+                    sy = (height - sh) / 2;
+                }
+            }
+
+            ctx.drawImage(imageRef.current, sx, sy, sw, sh, 0, 0, roundedWidth, roundedHeight);
+            const croppedDataUrl = canvas.toDataURL('image/png');
+            setCurrentImage(croppedDataUrl);
+
+            pushState({
+                ...currentState,
+                width: roundedWidth,
+                height: roundedHeight,
+                mode: 'crop',
+                imageSrc: croppedDataUrl
+            });
+        }
 
         setResizeWidth(roundedWidth.toString());
         setResizeHeight(roundedHeight.toString());
@@ -546,7 +584,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
 
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => onSave(imageUrl)}
+                        onClick={() => onSave(currentImage)}
                         className="px-8 py-2 bg-[#93B719] hover:bg-[#a6cd1d] text-white font-bold rounded shadow-lg transition-all transform hover:scale-105 active:scale-95"
                     >
                         保存
@@ -825,13 +863,10 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                 >
                     <img
                         ref={imageRef}
-                        src={imageUrl}
+                        src={currentImage}
                         alt="Editing"
                         onLoad={handleImageLoad}
                         className="w-full h-full select-none transition-all duration-300"
-                        style={{
-                            objectFit: currentState.mode === 'crop' ? 'cover' : 'fill'
-                        }}
                     />
 
                     <canvas
