@@ -243,12 +243,12 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
             const targetRatio = ratios[cropRatio];
             const currentRatio = width / height;
 
-            if (targetRatio > currentRatio) {
-                // Target is wider than current: reduce height
-                newHeight = Math.round(width / targetRatio);
-            } else {
-                // Target is taller than current: reduce width
+            if (currentRatio > targetRatio) {
+                // Current is wider than target: reduce width
                 newWidth = Math.round(height * targetRatio);
+            } else {
+                // Current is taller than target: reduce height
+                newHeight = Math.round(width / targetRatio);
             }
         }
 
@@ -729,17 +729,20 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                     {activeTool === 'crop' && (
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <div
-                                className="border-2 border-[#93B719] shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] transition-all duration-300 relative"
+                                className="border-2 border-[#93B719] shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] transition-all duration-500 ease-in-out relative flex items-center justify-center"
                                 style={{
-                                    width: cropRatio === 'custom' || cropRatio === 'square' ? '70%' :
-                                        cropRatio === '16:9' ? '90%' : '80%',
-                                    aspectRatio: cropRatio === 'square' ? '1/1' :
-                                        cropRatio === '3:2' ? '3/2' :
-                                            cropRatio === '4:3' ? '4/3' :
-                                                cropRatio === '5:4' ? '5/4' :
-                                                    cropRatio === '7:5' ? '7/5' :
-                                                        cropRatio === '16:9' ? '16/9' : 'none',
-                                    height: cropRatio === 'custom' ? '70%' : 'auto'
+                                    width: cropRatio === 'custom' ? '70%' :
+                                        cropRatio === 'square' ? '60%' :
+                                            cropRatio === '16:9' ? '95%' : '85%',
+                                    aspectRatio: cropRatio === 'square' ? '1 / 1' :
+                                        cropRatio === '3:2' ? '3 / 2' :
+                                            cropRatio === '4:3' ? '4 / 3' :
+                                                cropRatio === '5:4' ? '5 / 4' :
+                                                    cropRatio === '7:5' ? '7 / 5' :
+                                                        cropRatio === '16:9' ? '16 / 9' : 'auto',
+                                    height: cropRatio === 'custom' ? '70%' : 'auto',
+                                    maxHeight: '90%',
+                                    maxWidth: '90%'
                                 }}
                             >
                                 {/* Crop Handles */}
