@@ -57,6 +57,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     ];
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const imageRef = useRef<HTMLImageElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState<{ x: number, y: number } | null>(null);
 
@@ -66,18 +67,32 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
             const initialState: EditorState = {
                 rotation: 0,
                 filter: 'none',
-                drawings: [],
-                width: 2000,
-                height: 1333
+                drawings: []
             };
             setHistory([initialState]);
             setHistoryIndex(0);
             setCurrentState(initialState);
             setActiveTool('none');
-            setResizeWidth('2000');
-            setResizeHeight('1333');
         }
     }, [isOpen]);
+
+    const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        const img = e.currentTarget;
+        const naturalW = img.naturalWidth;
+        const naturalH = img.naturalHeight;
+
+        setResizeWidth(naturalW.toString());
+        setResizeHeight(naturalH.toString());
+        setOriginalRatio(naturalW / naturalH);
+
+        if (historyIndex === 0 && !currentState.width) {
+            const updatedState = { ...currentState, width: naturalW, height: naturalH };
+            setCurrentState(updatedState);
+            const newHistory = [...history];
+            newHistory[0] = updatedState;
+            setHistory(newHistory);
+        }
+    };
 
     // Draw existing drawings on canvas whenever state changes
     useEffect(() => {
@@ -553,26 +568,32 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
 
             {/* Editing Canvas Area */}
             <div className="flex-1 bg-[#151515] flex items-center justify-center p-12 overflow-hidden relative">
-                <div className="relative shadow-[0_0_100px_rgba(0,0,0,0.5)] transition-all duration-500 ease-in-out"
+                <div className="relative shadow-[0_0_100px_rgba(0,0,0,0.5)] transition-all duration-500 ease-in-out bg-black flex items-center justify-center"
                     style={{
                         transform: `rotate(${currentState.rotation}deg)`,
-                        filter: currentState.filter
+                        filter: currentState.filter,
+                        aspectRatio: currentState.width && currentState.height ? `${currentState.width}/${currentState.height}` : 'auto',
+                        width: currentState.width && currentState.height ? (currentState.width > currentState.height ? '80%' : 'auto') : 'auto',
+                        height: currentState.width && currentState.height ? (currentState.height >= currentState.width ? '70vh' : 'auto') : 'auto',
+                        maxWidth: '90%',
+                        maxHeight: '70vh'
                     }}
                 >
                     <img
+                        ref={imageRef}
                         src={imageUrl}
                         alt="Editing"
-                        className="max-w-full max-h-[60vh] object-contain select-none transition-all duration-300"
+                        onLoad={handleImageLoad}
+                        className="w-full h-full select-none transition-all duration-300"
                         style={{
-                            width: currentState.width ? `${currentState.width}px` : 'auto',
-                            height: currentState.height ? `${currentState.height}px` : 'auto',
+                            objectFit: 'fill'
                         }}
                     />
 
                     <canvas
                         ref={canvasRef}
-                        width={1200}
-                        height={800}
+                        width={currentState.width || 1200}
+                        height={currentState.height || 800}
                         className={`absolute inset-0 w-full h-full ${activeTool === 'draw' ? 'cursor-crosshair' : 'pointer-events-none'}`}
                         onMouseDown={handleCanvasMouseDown}
                         onMouseMove={handleCanvasMouseMove}
