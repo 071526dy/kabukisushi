@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { LandingPage } from '../../pages/LandingPage';
 import ImageAssetLibrary from '../components/editor/ImageAssetLibrary';
+import ImageEditorModal from '../components/editor/ImageEditorModal';
 
 export type BackgroundType = 'color' | 'image' | 'video';
 
@@ -43,6 +44,8 @@ export default function EditorPage() {
     const [backgroundEditSection, setBackgroundEditSection] = useState<string | null>(null);
     const [activeBackgroundTab, setActiveBackgroundTab] = useState<BackgroundType>('image');
     const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+    const [showImageEditor, setShowImageEditor] = useState(false);
+    const [editingImage, setEditingImage] = useState<string>('');
 
     // Background settings state
     const [backgroundSettings, setBackgroundSettings] = useState<Record<string, BackgroundConfig>>({
@@ -87,6 +90,23 @@ export default function EditorPage() {
             updateBackground(backgroundEditSection, { type: 'image', value: url });
         }
         setShowAssetLibrary(false);
+    };
+
+    const handleImageEdit = () => {
+        if (backgroundEditSection) {
+            const currentConfig = backgroundSettings[backgroundEditSection];
+            if (currentConfig && currentConfig.type === 'image') {
+                setEditingImage(currentConfig.value);
+                setShowImageEditor(true);
+            }
+        }
+    };
+
+    const handleImageSave = (editedUrl: string) => {
+        if (backgroundEditSection) {
+            updateBackground(backgroundEditSection, { type: 'image', value: editedUrl });
+        }
+        setShowImageEditor(false);
     };
 
 
@@ -346,7 +366,10 @@ export default function EditorPage() {
                                 <ChevronRight size={12} className="text-gray-600" />
                             </button>
                         </div>
-                        <button className="w-full py-2 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400 hover:text-white transition-colors">
+                        <button
+                            onClick={handleImageEdit}
+                            className="w-full py-2 flex items-center justify-center gap-2 text-[11px] font-bold text-gray-400 hover:text-white transition-colors"
+                        >
                             <ImageIcon size={14} />
                             画像を編集
                         </button>
@@ -438,6 +461,13 @@ export default function EditorPage() {
                 isOpen={showAssetLibrary}
                 onClose={() => setShowAssetLibrary(false)}
                 onSelect={handleImageSelect}
+            />
+            {/* Image Editor Modal */}
+            <ImageEditorModal
+                isOpen={showImageEditor}
+                onClose={() => setShowImageEditor(false)}
+                imageUrl={editingImage}
+                onSave={handleImageSave}
             />
         </div>
     );
