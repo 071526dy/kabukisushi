@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Menu, X, MapPin, Phone, Clock, Image as ImageIcon } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Menu, X, MapPin, Phone, Clock, Image as ImageIcon, Layout, Settings2, ChevronDown, ArrowUpToLine, ArrowDownToLine, AlignCenterVertical, RotateCcw } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import type { BackgroundConfig } from '../admin/pages/EditorPage';
+import type { BackgroundConfig, LayoutConfig } from '../admin/pages/EditorPage';
 
 interface LandingPageProps {
     isEditing?: boolean;
@@ -9,40 +9,299 @@ interface LandingPageProps {
     onBackgroundEdit?: (id: string) => void;
     activeSection?: string;
     backgroundSettings?: Record<string, BackgroundConfig>;
+    layoutSettings?: Record<string, LayoutConfig>;
+    onLayoutChange?: (sectionId: string, config: Partial<LayoutConfig>) => void;
 }
 
 
-export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEdit, activeSection, backgroundSettings }: LandingPageProps) {
+export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEdit, activeSection, backgroundSettings: propBackgroundSettings, layoutSettings: propLayoutSettings, onLayoutChange }: LandingPageProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    // Local state for settings when running in public mode (not editing)
+    const [localBackgroundSettings, setLocalBackgroundSettings] = useState<Record<string, BackgroundConfig> | undefined>(undefined);
+    const [localLayoutSettings, setLocalLayoutSettings] = useState<Record<string, LayoutConfig> | undefined>(undefined);
+
+    // Use props if available (editing mode), otherwise use local state (public mode)
+    const backgroundSettings = propBackgroundSettings || localBackgroundSettings;
+    const layoutSettings = propLayoutSettings || localLayoutSettings;
+
+    // Load settings from localStorage if on public page
+    useEffect(() => {
+        if (!isEditing) {
+            const savedBackgrounds = localStorage.getItem('site_background_settings');
+            const savedLayouts = localStorage.getItem('site_layout_settings');
+
+            if (savedBackgrounds) {
+                try {
+                    setLocalBackgroundSettings(JSON.parse(savedBackgrounds));
+                } catch (e) {
+                    console.error('Failed to parse saved background settings', e);
+                }
+            }
+
+            if (savedLayouts) {
+                try {
+                    setLocalLayoutSettings(JSON.parse(savedLayouts));
+                } catch (e) {
+                    console.error('Failed to parse saved layout settings', e);
+                }
+            }
+        }
+    }, [isEditing]);
+
+
+
+    const renderBackgroundContent = (sectionId: string) => {
+        const config = backgroundSettings?.[sectionId];
+        if (!config) return null;
+
+        return (
+            <>
+                {/* Video Background */}
+                {config.type === 'video' && (
+                    <div className="absolute inset-0 overflow-hidden z-0">
+                        {/* Check if it's a YouTube embed or direct file (simplified check) */}
+                        {isYouTubeUrl(config.value) ? (
+                            <iframe
+                                src={getYouTubeEmbedUrl(config.value)}
+                                className="w-full h-full object-cover pointer-events-none"
+                                allow="autoplay; encrypted-media; loop"
+                                title="Background Video"
+                            />
+                        ) : (
+                            // Assume direct selection from stock or file
+                            <div
+                                className="w-full h-full bg-cover bg-center"
+                                style={{ backgroundImage: `url('${config.value}')` }}
+                            >
+                                {/* Stock video mock: actually rendering image as video placeholder for now per EditorPage implementation details where we mapped stock video to images */}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Overlay */}
+                {(config.overlayOpacity !== undefined && config.overlayOpacity > 0) && (
+                    <div
+                        className="absolute inset-0 z-0 pointer-events-none transition-opacity duration-300"
+                        style={{ backgroundColor: 'black', opacity: config.overlayOpacity / 100 }}
+                    />
+                )}
+            </>
+        );
+    };
+
+    const isYouTubeUrl = (url: string) => url.includes('youtube.com') || url.includes('youtu.be');
+    const getYouTubeEmbedUrl = (url: string) => {
+        // Simple mock converter
+        return url.replace('watch?v=', 'embed/') + '?autoplay=1&mute=1&controls=0&loop=1';
+    };
+
 
     const getBackgroundStyle = (sectionId: string) => {
         const config = backgroundSettings?.[sectionId];
         if (!config) return {};
 
         if (config.type === 'color') {
-            return { backgroundColor: config.value, backgroundImage: 'none' };
+            return { backgroundColor: config.value, backgroundImage: 'none', color: config.textTheme === 'dark' ? '#000000' : '#ffffff' };
         } else if (config.type === 'image') {
-            return { backgroundImage: `url('${config.value}')`, backgroundColor: 'transparent' };
+            const style: any = {
+                backgroundImage: `url('${config.value}')`,
+                backgroundColor: 'transparent',
+                color: config.textTheme === 'dark' ? '#000000' : '#ffffff'
+            };
+            if (config.backgroundMode === 'contain') style.backgroundSize = 'contain';
+            else if (config.backgroundMode === 'tile') style.backgroundRepeat = 'repeat';
+            else if (config.backgroundMode === 'center') {
+                style.backgroundPosition = 'center';
+                style.backgroundRepeat = 'no-repeat';
+            } else {
+                style.backgroundSize = 'cover';
+                style.backgroundPosition = 'center';
+            }
+            return style;
+        } else if (config.type === 'video') {
+            return { backgroundColor: 'transparent', color: config.textTheme === 'dark' ? '#000000' : '#ffffff' };
         }
         return {};
     };
 
+    const getLayoutStyle = (sectionId: string) => {
+        const config = layoutSettings?.[sectionId];
+        if (!config) return {};
 
-    const BackgroundButton = ({ sectionId }: { sectionId: string }) => (
-        <div
-            onClick={(e) => {
-                e.stopPropagation();
-                onSectionSelect?.(sectionId);
-                onBackgroundEdit?.(sectionId);
-            }}
-            className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1 bg-black/70 hover:bg-black/90 text-white rounded cursor-pointer transition-all border border-white/10 group shadow-md"
-        >
-            <span className="text-[10px] font-bold">背景</span>
-            <div className="flex items-center justify-center">
-                <ImageIcon size={12} className="text-gray-300 group-hover:text-white" />
+        let classes = '';
+        /* Height */
+        if (config.fullHeight) classes += ' min-h-screen';
+
+        /* Padding */
+        if (config.topSpace) classes += ' pt-20';
+        else classes += ' pt-0';
+
+        if (config.bottomSpace) classes += ' pb-20';
+        else classes += ' pb-0';
+
+        /* Alignment (Vertical) */
+        if (config.alignment === 'top') classes += ' justify-start';
+        else if (config.alignment === 'bottom') classes += ' justify-end';
+        else classes += ' justify-center'; // center default
+
+        return classes + ' w-full';
+    };
+
+    const getContainerWidthClass = (sectionId: string) => {
+        const config = layoutSettings?.[sectionId];
+        const width = config?.width || 'normal';
+
+        switch (width) {
+            case 'auto': return 'container mx-auto px-4';
+            case 'full': return 'w-full px-4';
+            case 'wide': return 'max-w-7xl w-full px-4';
+            case 'small': return 'max-w-2xl w-full px-4';
+            case 'normal':
+            default: return 'max-w-4xl w-full px-4';
+        }
+    };
+
+
+    const SectionToolbar = ({ sectionId }: { sectionId: string }) => {
+        const [showLayout, setShowLayout] = useState(false);
+        const config = layoutSettings?.[sectionId] || { width: 'normal', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true };
+
+        return (
+            <div
+                className="absolute top-4 right-4 z-20 flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Layout Button */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowLayout(!showLayout)}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-white rounded cursor-pointer transition-all border group shadow-md ${showLayout ? 'bg-[#2d2d2d] border-[#2d2d2d]' : 'bg-black/70 hover:bg-black/90 border-white/10'}`}
+                    >
+                        <span className="text-[10px] font-bold">レイアウト</span>
+                        <Layout size={12} className={showLayout ? 'text-white' : 'text-gray-300 group-hover:text-white'} />
+                    </button>
+
+                    {/* Layout Control Panel (Popover) */}
+                    {showLayout && (
+                        <div className="absolute top-9 right-0 w-64 bg-[#2d2d2d] rounded shadow-xl text-white border border-black/20 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-3 py-2 bg-[#363636] border-b border-black/10">
+                                <span className="text-[11px] font-bold text-gray-300 flex items-center gap-1.5">
+                                    <Layout size={12} />
+                                    レイアウト
+                                </span>
+                                <Settings2 size={12} className="text-gray-500 hover:text-gray-300 cursor-pointer" />
+                            </div>
+
+                            <div className="p-3 space-y-4">
+                                {/* Width Control */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-gray-500 font-bold">セクション幅</label>
+                                    <div className="relative">
+                                        <select
+                                            value={config.width}
+                                            onChange={(e) => onLayoutChange?.(sectionId, { width: e.target.value as any })}
+                                            className="w-full bg-[#1c1c1c] text-[11px] text-white border border-gray-700 rounded px-2 py-1.5 focus:border-blue-500 focus:outline-none appearance-none cursor-pointer"
+                                        >
+                                            <option value="auto">自動 （デフォルト）</option>
+                                            <option value="full">全体</option>
+                                            <option value="wide">幅さ</option>
+                                            <option value="normal">普通</option>
+                                            <option value="small">狭い</option>
+                                        </select>
+                                        <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                                    </div>
+                                </div>
+
+                                {/* Content Alignment */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-gray-500 font-bold">コンテンツの配置</label>
+                                    <div className="flex bg-[#1c1c1c] rounded p-0.5 border border-gray-700">
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { alignment: 'top' })}
+                                            className={`flex-1 flex items-center justify-center py-1 rounded-sm transition-colors ${config.alignment === 'top' ? 'bg-[#3d3d3d] text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                            title="上揃え"
+                                        >
+                                            <ArrowUpToLine size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { alignment: 'center' })}
+                                            className={`flex-1 flex items-center justify-center py-1 rounded-sm transition-colors ${config.alignment === 'center' ? 'bg-[#3d3d3d] text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                            title="中央揃え"
+                                        >
+                                            <AlignCenterVertical size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { alignment: 'bottom' })}
+                                            className={`flex-1 flex items-center justify-center py-1 rounded-sm transition-colors ${config.alignment === 'bottom' ? 'bg-[#3d3d3d] text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                            title="下揃え"
+                                        >
+                                            <ArrowDownToLine size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Toggles */}
+                                <div className="space-y-2 pt-2 border-t border-white/5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] text-gray-300">フルハイト</span>
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { fullHeight: !config.fullHeight })}
+                                            className={`w-8 h-4 rounded-full relative transition-colors ${config.fullHeight ? 'bg-[#88c057]' : 'bg-gray-600'}`}
+                                        >
+                                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${config.fullHeight ? 'left-4.5 translate-x-3.5' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] text-gray-300">上のスペース</span>
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { topSpace: !config.topSpace })}
+                                            className={`w-8 h-4 rounded-full relative transition-colors ${config.topSpace ? 'bg-[#88c057]' : 'bg-gray-600'}`}
+                                        >
+                                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${config.topSpace ? 'left-4.5 translate-x-3.5' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] text-gray-300">下のスペース</span>
+                                        <button
+                                            onClick={() => onLayoutChange?.(sectionId, { bottomSpace: !config.bottomSpace })}
+                                            className={`w-8 h-4 rounded-full relative transition-colors ${config.bottomSpace ? 'bg-[#88c057]' : 'bg-gray-600'}`}
+                                        >
+                                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${config.bottomSpace ? 'left-4.5 translate-x-3.5' : 'left-0.5'}`} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => onLayoutChange?.(sectionId, { width: 'normal', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true })}
+                                    className="w-full flex items-center justify-center gap-2 py-1.5 mt-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-gray-200 rounded text-[10px] transition-colors"
+                                >
+                                    <RotateCcw size={10} />
+                                    リセット
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Background Button */}
+                <div
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onSectionSelect?.(sectionId);
+                        onBackgroundEdit?.(sectionId);
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white rounded cursor-pointer transition-all border border-white/10 group shadow-md"
+                >
+                    <span className="text-[10px] font-bold">背景</span>
+                    <div className="flex items-center justify-center">
+                        <ImageIcon size={12} className="text-gray-300 group-hover:text-white" />
+                    </div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const scrollToSection = (id: string) => {
         const element = document.getElementById(id);
@@ -101,13 +360,15 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
             <section
                 id="home"
                 onClick={() => isEditing && onSectionSelect?.('home')}
-                className={`relative min-h-screen flex items-center justify-center bg-cover bg-center transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'home' ? 'ring-4 ring-[#deb55a]' : ''}`}
+                className={`flex flex-col relative transition-all duration-300 bg-cover bg-center ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'home' ? 'ring-4 ring-[#deb55a]' : ''} ${getLayoutStyle('home')}`}
                 style={getBackgroundStyle('home')}
             >
-                {isEditing && <BackgroundButton sectionId="home" />}
+                {renderBackgroundContent('home')}
+                {isEditing && <SectionToolbar sectionId="home" />}
 
-                <div className="absolute inset-0 bg-black/60"></div>
-                <div className="relative z-10 text-center px-4 max-w-4xl">
+                {/* Original hardcoded overlay - conditionally render if no config overlay is active to preserve default look until edited */}
+                {(!backgroundSettings?.['home']?.overlayOpacity) && <div className="absolute inset-0 bg-black/60"></div>}
+                <div className={`relative z-10 text-center mx-auto ${getContainerWidthClass('home')}`}>
                     <div className="mb-8">
                         <div className="w-48 h-32 mx-auto mb-4 bg-[#deb55a]/10 rounded flex items-center justify-center">
                             <span style={{ fontFamily: "'Bad Script', cursive" }} className="text-5xl text-[#fcebc5]">KABUKI</span>
@@ -164,12 +425,12 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
             <section
                 id="about"
                 onClick={() => isEditing && onSectionSelect?.('about')}
-                className={`py-20 transition-all duration-300 relative ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'about' ? 'ring-4 ring-[#deb55a]' : ''}`}
+                className={`flex flex-col relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'about' ? 'ring-4 ring-[#deb55a]' : ''} ${getLayoutStyle('about')}`}
                 style={getBackgroundStyle('about')}
             >
-
-                {isEditing && <BackgroundButton sectionId="about" />}
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+                {renderBackgroundContent('about')}
+                {isEditing && <SectionToolbar sectionId="about" />}
+                <div className={`mx-auto ${getContainerWidthClass('about')}`}>
                     <h2 style={{ fontFamily: "'Bad Script', cursive" }} className="text-5xl text-center mb-4">ABOUT US</h2>
                     <div className="grid md:grid-cols-2 gap-12 items-center mt-12">
                         <div>
@@ -195,12 +456,12 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
             <section
                 id="gallery"
                 onClick={() => isEditing && onSectionSelect?.('gallery')}
-                className={`py-20 transition-all duration-300 relative ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'gallery' ? 'ring-4 ring-[#deb55a]' : ''}`}
+                className={`flex flex-col relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'gallery' ? 'ring-4 ring-[#deb55a]' : ''} ${getLayoutStyle('gallery')}`}
                 style={getBackgroundStyle('gallery')}
             >
-
-                {isEditing && <BackgroundButton sectionId="gallery" />}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                {renderBackgroundContent('gallery')}
+                {isEditing && <SectionToolbar sectionId="gallery" />}
+                <div className={`mx-auto ${getContainerWidthClass('gallery')}`}>
                     <h2 style={{ fontFamily: "'Bad Script', cursive" }} className="text-5xl text-center mb-4 text-[#1C1C1C]">Gallery</h2>
                     <p className="text-center text-gray-600 mb-12">Photos from our restaurant.</p>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -224,9 +485,9 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
                 className={`py-20 bg-cover bg-center relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'access' ? 'ring-4 ring-[#deb55a]' : ''}`}
                 style={getBackgroundStyle('access')}
             >
-
-                {isEditing && <BackgroundButton sectionId="access" />}
-                <div className="absolute inset-0 bg-white/90"></div>
+                {renderBackgroundContent('access')}
+                {isEditing && <SectionToolbar sectionId="access" />}
+                {(!backgroundSettings?.['access']?.overlayOpacity) && <div className="absolute inset-0 bg-white/90"></div>}
                 <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 style={{ fontFamily: "'Bad Script', cursive" }} className="text-5xl text-center mb-12 text-[#1C1C1C]">ACCESS</h2>
                     <div className="grid md:grid-cols-2 gap-12 items-start">
@@ -263,12 +524,12 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
             <section
                 id="menu"
                 onClick={() => isEditing && onSectionSelect?.('menu')}
-                className={`py-20 transition-all duration-300 relative ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'menu' ? 'ring-4 ring-[#deb55a]' : ''}`}
+                className={`flex flex-col relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'menu' ? 'ring-4 ring-[#deb55a]' : ''} ${getLayoutStyle('menu')}`}
                 style={getBackgroundStyle('menu')}
             >
-
-                {isEditing && <BackgroundButton sectionId="menu" />}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                {renderBackgroundContent('menu')}
+                {isEditing && <SectionToolbar sectionId="menu" />}
+                <div className={`mx-auto ${getContainerWidthClass('menu')}`}>
                     <h2 style={{ fontFamily: "'Bad Script', cursive" }} className="text-5xl text-center mb-4 text-[#1C1C1C]">Menu</h2>
                     <p className="text-center text-xl mb-12" style={{ fontFamily: "'Archivo Narrow', sans-serif" }}>Course</p>
                     <p className="text-center text-gray-600 mb-12">まずは当店お勧めのコースからお選びください</p>
@@ -444,9 +705,9 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
                 className={`py-20 bg-cover bg-center relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'affiliated' ? 'ring-4 ring-[#deb55a]' : ''}`}
                 style={getBackgroundStyle('affiliated')}
             >
-
-                {isEditing && <BackgroundButton sectionId="affiliated" />}
-                <div className="absolute inset-0 bg-black/70"></div>
+                {renderBackgroundContent('affiliated')}
+                {isEditing && <SectionToolbar sectionId="affiliated" />}
+                {(!backgroundSettings?.['affiliated']?.overlayOpacity) && <div className="absolute inset-0 bg-black/70"></div>}
                 <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <h2 style={{ fontFamily: "'Bad Script', cursive" }} className="text-4xl text-center mb-4 text-[#fcebc5]">Affiliated store of KABUKI SUSHI</h2>
                     <p className="text-center text-xl mb-12 text-[#e8eaec]">姉妹店</p>
@@ -488,12 +749,12 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
             <footer
                 id="footer"
                 onClick={() => isEditing && onSectionSelect?.('footer')}
-                className={`text-[#e8eaec] py-8 border-t border-[#deb55a]/20 transition-all duration-300 relative ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'footer' ? 'ring-4 ring-[#deb55a]' : ''}`}
+                className={`text-[#e8eaec] border-t border-[#deb55a]/20 flex flex-col relative transition-all duration-300 ${isEditing ? 'cursor-pointer hover:ring-4 hover:ring-[#deb55a]/50' : ''} ${activeSection === 'footer' ? 'ring-4 ring-[#deb55a]' : ''} ${getLayoutStyle('footer')}`}
                 style={getBackgroundStyle('footer')}
             >
-
-                {isEditing && <BackgroundButton sectionId="footer" />}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                {renderBackgroundContent('footer')}
+                {isEditing && <SectionToolbar sectionId="footer" />}
+                <div className={`mx-auto text-center ${getContainerWidthClass('footer')}`}>
                     <p style={{ fontFamily: "'Bad Script', cursive" }} className="text-2xl mb-2 text-[#fcebc5]">KABUKI寿司 1番通り店</p>
                     <p className="text-sm text-gray-400">© 2024 KABUKI Sushi. All rights reserved.</p>
                     <div className="mt-4">

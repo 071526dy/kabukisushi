@@ -5,14 +5,18 @@ interface ImageAssetLibraryProps {
     isOpen: boolean;
     onClose: () => void;
     onSelect: (url: string) => void;
+    mediaType?: 'image' | 'video';
 }
 
 type TabType = 'upload' | 'uploaded' | 'library';
 
-export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAssetLibraryProps) {
+export default function ImageAssetLibrary({ isOpen, onClose, onSelect, mediaType = 'image' }: ImageAssetLibraryProps) {
     const [activeTab, setActiveTab] = useState<TabType>('upload');
     const [searchQuery, setSearchQuery] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const isVideo = mediaType === 'video';
+    const label = isVideo ? '動画' : '画像';
 
     if (!isOpen) return null;
 
@@ -67,14 +71,14 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                         className={`flex flex-col items-center gap-2 px-8 py-5 border-r border-gray-50 transition-all ${activeTab === 'upload' ? 'bg-[#f8f9fa] shadow-inner' : 'hover:bg-gray-50'}`}
                     >
                         <CloudUpload size={28} className={activeTab === 'upload' ? 'text-blue-500' : 'text-gray-400'} />
-                        <span className={`text-[11px] font-bold ${activeTab === 'upload' ? 'text-gray-900' : 'text-gray-500'}`}>新しい画像をアップロード</span>
+                        <span className={`text-[11px] font-bold ${activeTab === 'upload' ? 'text-gray-900' : 'text-gray-500'}`}>新しい{label}をアップロード</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('uploaded')}
                         className={`flex flex-col items-center gap-2 px-8 py-5 border-r border-gray-50 transition-all ${activeTab === 'uploaded' ? 'bg-[#f8f9fa] shadow-inner' : 'hover:bg-gray-50'}`}
                     >
                         <Folder size={28} className={activeTab === 'uploaded' ? 'text-blue-500' : 'text-gray-400'} />
-                        <span className={`text-[11px] font-bold ${activeTab === 'uploaded' ? 'text-gray-900' : 'text-gray-500'}`}>アップロードされた画像</span>
+                        <span className={`text-[11px] font-bold ${activeTab === 'uploaded' ? 'text-gray-900' : 'text-gray-500'}`}>アップロードされた{label}</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('library')}
@@ -103,7 +107,7 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                     ref={fileInputRef}
                                     onChange={handleFileChange}
                                     className="hidden"
-                                    accept="image/gif,image/jpeg,image/jpg,image/png,image/bmp,image/x-icon"
+                                    accept={isVideo ? "video/mp4,video/webm,video/ogg" : "image/gif,image/jpeg,image/jpg,image/png,image/bmp,image/x-icon"}
                                 />
 
                                 <div className="w-full max-w-md space-y-4">
@@ -119,12 +123,15 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                         </button>
                                     </div>
                                     <div className="text-[10px] text-gray-400 mt-2">
-                                        対応している形式：gif, jpg, jpeg, png, bmp, ico。10MB までアップロード可能です。
+                                        {isVideo
+                                            ? '対応している形式：mp4, webm, ogg。100MB までアップロード可能です。'
+                                            : '対応している形式：gif, jpg, jpeg, png, bmp, ico。10MB までアップロード可能です。'
+                                        }
                                     </div>
                                 </div>
 
                                 <div className="mt-12 text-blue-500 text-xs font-bold bg-blue-50 px-4 py-2 rounded-full border border-blue-100 italic">
-                                    ヒント：背景画像には1600x900ピクセル以上の画像を推奨しています。
+                                    ヒント：{isVideo ? '背景動画には1280x720ピクセル以上の動画を推奨しています。' : '背景画像には1600x900ピクセル以上の画像を推奨しています。'}
                                 </div>
                             </div>
                         </div>
@@ -135,8 +142,8 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                             <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-white shadow-sm">
                                 <div className="flex items-center gap-4">
                                     <select className="p-2 border border-gray-200 rounded text-sm outline-none focus:ring-2 focus:ring-blue-500/20 bg-[#fafafa]">
-                                        <option>すべてのアップロード画像</option>
-                                        <option>このサイトの画像</option>
+                                        <option>すべてのアップロード{label}</option>
+                                        <option>このサイトの{label}</option>
                                     </select>
                                     <div className="flex items-center text-xs text-gray-400 font-bold border-l border-gray-200 pl-4 h-6">
                                         <button className="text-blue-500 px-2">最新</button>
@@ -147,7 +154,7 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                 <div className="flex gap-2">
                                     <button className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded text-xs font-bold hover:bg-red-100 transition-colors">
                                         <Trash2 size={12} />
-                                        画像の削除
+                                        {label}の削除
                                     </button>
                                 </div>
                             </div>
@@ -156,7 +163,7 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                     {/* Add Image Link */}
                                     <div className="aspect-square border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50 group transition-all">
                                         <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-500 transition-all font-bold text-2xl">+</div>
-                                        <div className="text-[10px] text-gray-400 font-bold group-hover:text-blue-500">画像をインポート</div>
+                                        <div className="text-[10px] text-gray-400 font-bold group-hover:text-blue-500">{label}をインポート</div>
                                     </div>
 
                                     {uploadedImages.map((url, i) => (
@@ -165,7 +172,13 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                             className="group relative aspect-square bg-gray-100 rounded-lg overflow-hidden border border-transparent hover:border-[#88c057] transition-all cursor-pointer shadow-sm hover:shadow-md"
                                             onClick={() => onSelect(url)}
                                         >
-                                            <img src={url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" />
+                                            {isVideo ? (
+                                                <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+                                                    <Video className="text-white opacity-50" />
+                                                </div>
+                                            ) : (
+                                                <img src={url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="" />
+                                            )}
                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2">
                                                 <button className="px-4 py-1.5 bg-[#88c057] text-white text-[10px] font-bold rounded shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">選択</button>
                                                 <div className="mt-2 text-[8px] text-white/80 text-center line-clamp-2 px-1">1080×1350 · 0.13MB<br />2日前</div>
@@ -209,7 +222,7 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                                 <div className="p-4 bg-white border-b border-gray-100 shadow-sm">
                                     <div className="relative">
                                         <textarea
-                                            placeholder="300万以上の画像を検索..."
+                                            placeholder={`300万以上の${label}を検索...`}
                                             className="w-full p-4 pr-12 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-300 transition-all resize-none h-12 flex items-center shadow-inner"
                                             rows={1}
                                         />
@@ -243,7 +256,7 @@ export default function ImageAssetLibrary({ isOpen, onClose, onSelect }: ImageAs
                     </div>
                     <div className="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded text-red-400 hover:bg-red-500/20 cursor-pointer transition-colors">
                         <Trash2 size={12} />
-                        画像削除
+                        {label}削除
                     </div>
                 </div>
             </div>

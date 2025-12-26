@@ -10,7 +10,13 @@ import {
     Type,
     X,
     SlidersHorizontal,
-    Minus
+    Minus,
+    Bold,
+    Italic,
+    Underline,
+    AlignLeft,
+    AlignCenter,
+    AlignRight
 } from 'lucide-react';
 
 interface ImageEditorModalProps {
@@ -51,6 +57,15 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     const [brushSize, setBrushSize] = useState(12);
     const [showColorPicker, setShowColorPicker] = useState(false);
 
+    // Text tool states
+    const [textBold, setTextBold] = useState(false);
+    const [textItalic, setTextItalic] = useState(false);
+    const [textUnderline, setTextUnderline] = useState(false);
+    const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right'>('left');
+    const [textColor, setTextColor] = useState('#00a9ff');
+    const [textSize, setTextSize] = useState(50);
+    const [showTextColorPicker, setShowTextColorPicker] = useState(false);
+
     const [resizeWidth, setResizeWidth] = useState('2000');
     const [resizeHeight, setResizeHeight] = useState('1333');
     const [maintainRatio, setMaintainRatio] = useState(true);
@@ -67,16 +82,16 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     const [startPoint, setStartPoint] = useState<{ x: number, y: number } | null>(null);
 
     const [cropRatio, setCropRatio] = useState<CropRatio>('custom');
-    const [cropBox, setCropBox] = useState({ left: 15, top: 15, width: 70, height: 70 });
+    const [cropBox, setCropBox] = useState({ left: 0, top: 0, width: 0, height: 0 });
     const [dragSession, setDragSession] = useState<{ type: string, startX: number, startY: number, startBox: any } | null>(null);
     const [isCreatingCrop, setIsCreatingCrop] = useState(false);
 
-    // Default crop box when switching to custom
-    useEffect(() => {
-        if (activeTool === 'crop' && cropRatio === 'custom' && cropBox.width === 0) {
-            setCropBox({ left: 15, top: 15, width: 70, height: 70 });
-        }
-    }, [activeTool, cropRatio]);
+    // Text objects
+    const [textObjects, setTextObjects] = useState<any[]>([]);
+    const [editingTextId, setEditingTextId] = useState<string | null>(null);
+    const textInputRef = useRef<HTMLInputElement>(null);
+
+    // No default crop box for custom mode - user must create it by dragging
 
     // Initialize history
     useEffect(() => {
@@ -84,11 +99,13 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
             const initialState: EditorState = {
                 rotation: 0,
                 filter: 'none',
-                drawings: []
+                drawings: [],
+                imageSrc: imageUrl
             };
             setHistory([initialState]);
             setHistoryIndex(0);
             setCurrentState(initialState);
+            setCurrentImage(imageUrl);
             setActiveTool('none');
         }
     }, [isOpen]);
@@ -196,7 +213,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
         pushState(initialState);
         setCurrentImage(imageUrl);
         setCropRatio('custom');
-        setCropBox({ left: 15, top: 15, width: 70, height: 70 });
+        setCropBox({ left: 0, top: 0, width: 0, height: 0 });
     };
 
     const handleRotate = () => {
@@ -231,61 +248,71 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     };
 
     const handleCropApply = () => {
-        let width = currentState.width;
-        let height = currentState.height;
-
-        if (!width || !height) {
-            if (imageRef.current) {
-                width = imageRef.current.naturalWidth;
-                height = imageRef.current.naturalHeight;
-            }
+        const img = imageRef.current;
+        if (!img) {
+            console.error('Image reference not found');
+            return;
         }
 
-        if (!width || !height) return;
+        let width = currentState.width || img.naturalWidth;
+        let height = currentState.height || img.naturalHeight;
+
+        if (!width || !height) {
+            console.error('Invalid image dimensions');
+            return;
+        }
 
         let finalWidth = width;
         let finalHeight = height;
 
+        const ratios: Record<string, number> = {
+            'square': 1, '3:2': 3 / 2, '4:3': 4 / 3, '5:4': 5 / 4, '7:5': 7 / 5, '16:9': 16 / 9
+        };
+
+        // Validate custom crop dimensions
         if (cropRatio === 'custom') {
-            // Avoid zero-size application
-            if (cropBox.width < 1 || cropBox.height < 1) return;
-            finalWidth = Math.max(10, Math.round((width * cropBox.width) / 100));
-            finalHeight = Math.max(10, Math.round((height * cropBox.height) / 100));
-        } else {
-            const ratios: Record<string, number> = {
-                'square': 1,
-                '3:2': 3 / 2,
-                '4:3': 4 / 3,
-                '5:4': 5 / 4,
-                '7:5': 7 / 5,
-                '16:9': 16 / 9
-            };
+            if (cropBox.width < 1 || cropBox.height < 1) {
+                console.warn('Crop box too small. Please select a larger area.');
+                return;
+            }
+            finalWidth = (width * cropBox.width) / 100;
+            finalHeight = (height * cropBox.height) / 100;
 
-            if (ratios[cropRatio]) {
-                const targetRatio = ratios[cropRatio];
-                const currentRatio = width / height;
-
-                if (currentRatio > targetRatio) {
-                    finalWidth = height * targetRatio;
-                } else {
-                    finalHeight = width / targetRatio;
-                }
+            // Ensure minimum dimensions
+            if (finalWidth < 10 || finalHeight < 10) {
+                console.warn('Resulting crop would be too small');
+                return;
+            }
+        } else if (ratios[cropRatio]) {
+            const tr = ratios[cropRatio];
+            if (width / height > tr) {
+                finalWidth = height * tr;
+            } else {
+                finalHeight = width / tr;
             }
         }
 
         const roundedWidth = Math.round(finalWidth);
         const roundedHeight = Math.round(finalHeight);
 
-        // Update originalRatio so subsequent actions (like resize sync) work with new image base
-        setOriginalRatio(roundedWidth / roundedHeight);
+        console.log('Applying crop:', {
+            cropRatio,
+            cropBox: cropRatio === 'custom' ? cropBox : 'preset',
+            originalDimensions: { width, height },
+            newDimensions: { width: roundedWidth, height: roundedHeight }
+        });
 
-        // Create a temporary canvas to perform ACTUAL cropping
-        const canvas = document.createElement('canvas');
-        canvas.width = roundedWidth;
-        canvas.height = roundedHeight;
-        const ctx = canvas.getContext('2d');
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = roundedWidth;
+            canvas.height = roundedHeight;
+            const ctx = canvas.getContext('2d');
 
-        if (ctx && imageRef.current) {
+            if (!ctx) {
+                console.error('Failed to get canvas context');
+                return;
+            }
+
             let sx = 0, sy = 0, sw = width, sh = height;
 
             if (cropRatio === 'custom') {
@@ -293,21 +320,24 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                 sy = (height * cropBox.top) / 100;
                 sw = (width * cropBox.width) / 100;
                 sh = (height * cropBox.height) / 100;
-            } else {
-                // Preset ratios: center crop
-                if (width / height > (roundedWidth / roundedHeight)) {
-                    sw = height * (roundedWidth / roundedHeight);
+            } else if (ratios[cropRatio]) {
+                const tr = ratios[cropRatio];
+                if (width / height > tr) {
+                    sw = height * tr;
                     sx = (width - sw) / 2;
                 } else {
-                    sh = width / (roundedWidth / roundedHeight);
+                    sh = width / tr;
                     sy = (height - sh) / 2;
                 }
             }
 
-            ctx.drawImage(imageRef.current, sx, sy, sw, sh, 0, 0, roundedWidth, roundedHeight);
-            const croppedDataUrl = canvas.toDataURL('image/png');
-            setCurrentImage(croppedDataUrl);
+            console.log('Drawing image with params:', { sx, sy, sw, sh, dw: roundedWidth, dh: roundedHeight });
 
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, roundedWidth, roundedHeight);
+            const croppedDataUrl = canvas.toDataURL('image/png');
+
+            setOriginalRatio(roundedWidth / roundedHeight);
+            setCurrentImage(croppedDataUrl);
             pushState({
                 ...currentState,
                 width: roundedWidth,
@@ -315,14 +345,20 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                 mode: 'crop',
                 imageSrc: croppedDataUrl
             });
+
+            setResizeWidth(roundedWidth.toString());
+            setResizeHeight(roundedHeight.toString());
+
+            // Reset crop box for next crop operation
+            setCropBox({ left: 0, top: 0, width: 0, height: 0 });
+            setActiveTool('none');
+
+            console.log('Crop applied successfully');
+        } catch (err) {
+            console.error('Crop failed:', err);
+            alert('クロップに失敗しました。もう一度お試しください。');
+            setActiveTool('none');
         }
-
-        setResizeWidth(roundedWidth.toString());
-        setResizeHeight(roundedHeight.toString());
-
-        // Reset cropBox for next use
-        setCropBox({ left: 0, top: 0, width: 0, height: 0 });
-        setActiveTool('none');
     };
 
     const handleCropBoxMouseDown = (e: React.MouseEvent, type: string) => {
@@ -336,13 +372,67 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
     };
 
     const handleEditorMouseDown = (e: React.MouseEvent) => {
+        console.log('handleEditorMouseDown called, activeTool:', activeTool);
+
+        // Handle text tool
+        if (activeTool === 'text') {
+            console.log('Text tool active, processing click');
+            e.stopPropagation();
+            e.preventDefault();
+
+            const container = imageRef.current?.parentElement;
+            if (!container) {
+                console.log('No container found');
+                return;
+            }
+            const rect = container.getBoundingClientRect();
+
+            const x = e.clientX;
+            const y = e.clientY;
+
+            const xPercent = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100));
+            const yPercent = Math.max(0, Math.min(100, ((y - rect.top) / rect.height) * 100));
+
+            console.log('Creating text at:', xPercent, yPercent);
+
+            const newTextId = `text-${Date.now()}`;
+            const newText = {
+                id: newTextId,
+                text: '',
+                x: xPercent,
+                y: yPercent,
+                size: textSize,
+                color: textColor,
+                bold: textBold,
+                italic: textItalic,
+                underline: textUnderline,
+                align: textAlign
+            };
+
+            setTextObjects(prev => [...prev, newText]);
+            setEditingTextId(newTextId);
+
+            console.log('Text object created:', newText);
+
+            // Focus input after a longer delay to ensure it's rendered
+            setTimeout(() => {
+                if (textInputRef.current) {
+                    textInputRef.current.focus();
+                    console.log('Input focused');
+                } else {
+                    console.log('Input ref not available');
+                }
+            }, 50);
+            return;
+        }
+
+        // Handle crop tool
         if (activeTool !== 'crop' || cropRatio !== 'custom') return;
 
         const container = imageRef.current?.parentElement;
         if (!container) return;
         const rect = container.getBoundingClientRect();
 
-        // Ensure the click is within the image area (with some margin)
         const x = e.clientX;
         const y = e.clientY;
 
@@ -372,18 +462,28 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
         const newBox = { ...dragSession.startBox };
 
         if (dragSession.type === 'create') {
-            if (deltaX > 0) {
-                newBox.width = Math.min(100 - newBox.left, deltaX);
+            // Handle horizontal direction
+            if (deltaX >= 0) {
+                // Dragging right
+                newBox.left = dragSession.startBox.left;
+                newBox.width = Math.min(100 - dragSession.startBox.left, deltaX);
             } else {
-                newBox.left = Math.max(0, dragSession.startBox.left + deltaX);
-                newBox.width = Math.abs(deltaX);
+                // Dragging left
+                const newLeft = Math.max(0, dragSession.startBox.left + deltaX);
+                newBox.left = newLeft;
+                newBox.width = dragSession.startBox.left - newLeft;
             }
 
-            if (deltaY > 0) {
-                newBox.height = Math.min(100 - newBox.top, deltaY);
+            // Handle vertical direction
+            if (deltaY >= 0) {
+                // Dragging down
+                newBox.top = dragSession.startBox.top;
+                newBox.height = Math.min(100 - dragSession.startBox.top, deltaY);
             } else {
-                newBox.top = Math.max(0, dragSession.startBox.top + deltaY);
-                newBox.height = Math.abs(deltaY);
+                // Dragging up
+                const newTop = Math.max(0, dragSession.startBox.top + deltaY);
+                newBox.top = newTop;
+                newBox.height = dragSession.startBox.top - newTop;
             }
         } else if (dragSession.type === 'move') {
             newBox.left = Math.max(0, Math.min(100 - newBox.width, dragSession.startBox.left + deltaX));
@@ -495,6 +595,117 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
         setStartPoint(null);
     };
 
+    const handleSave = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = currentImage;
+
+        img.onload = () => {
+            // Set canvas size to match image
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // Apply rotation if needed
+            ctx.save();
+            if (currentState.rotation) {
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate((currentState.rotation * Math.PI) / 180);
+                ctx.translate(-canvas.width / 2, -canvas.height / 2);
+            }
+
+            // Draw image with filter
+            if (currentState.filter && currentState.filter !== 'none') {
+                ctx.filter = currentState.filter;
+            }
+
+            ctx.drawImage(img, 0, 0);
+            ctx.restore();
+
+            // Draw drawings
+            if (currentState.drawings && currentState.drawings.length > 0) {
+                ctx.save();
+                // Scale factor if canvas size differs from display size (assuming drawings were made on display coordinates)
+                // However, the drawings are likely stored in relative coordinates or we need to assume 1:1 for now if we don't have screen size ref.
+                // Looking at handleCanvasMouseDown, x/y are scaled by canvas.width/rect.width, so they are already in canvas coordinates!
+
+                currentState.drawings.forEach(drawing => {
+                    ctx.beginPath();
+                    ctx.strokeStyle = drawing.color;
+                    ctx.lineWidth = drawing.size;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    if (drawing.mode === 'free' && drawing.points) {
+                        if (drawing.points.length > 0) {
+                            ctx.moveTo(drawing.points[0].x, drawing.points[0].y);
+                            for (let i = 1; i < drawing.points.length; i++) {
+                                ctx.lineTo(drawing.points[i].x, drawing.points[i].y);
+                            }
+                        }
+                    } else if (drawing.mode === 'line' && drawing.start && drawing.end) {
+                        ctx.moveTo(drawing.start.x, drawing.start.y);
+                        ctx.lineTo(drawing.end.x, drawing.end.y);
+                    }
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+
+            // Draw text objects
+            textObjects.forEach(textObj => {
+                ctx.save();
+
+                // Configure font
+                const fontSize = textObj.size * (canvas.width / 1000); // Scale font size relative to image width
+                const fontWeight = textObj.bold ? 'bold' : 'normal';
+                const fontStyle = textObj.italic ? 'italic' : 'normal';
+                ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px sans-serif`;
+                ctx.fillStyle = textObj.color;
+                ctx.textAlign = textObj.align as CanvasTextAlign;
+                ctx.textBaseline = 'middle';
+
+                // Add shadow for better visibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                ctx.shadowBlur = 4;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                // Calculate position
+                const x = (textObj.x / 100) * canvas.width;
+                const y = (textObj.y / 100) * canvas.height;
+
+                // Handle text underline manually since canvas text doesn't support it directly
+                if (textObj.underline) {
+                    const metrics = ctx.measureText(textObj.text);
+                    const lineWidth = fontSize / 15;
+                    ctx.beginPath();
+                    ctx.strokeStyle = textObj.color;
+                    ctx.lineWidth = lineWidth;
+                    const textWidth = metrics.width;
+
+                    let startX = x;
+                    if (textObj.align === 'center') startX = x - textWidth / 2;
+                    if (textObj.align === 'right') startX = x - textWidth;
+
+                    ctx.moveTo(startX, y + fontSize / 2);
+                    ctx.lineTo(startX + textWidth, y + fontSize / 2);
+                    ctx.stroke();
+                }
+
+                ctx.fillText(textObj.text, x, y);
+                ctx.restore();
+            });
+
+            // Save final image
+            const finalDataUrl = canvas.toDataURL('image/png');
+            onSave(finalDataUrl);
+        };
+    };
+
     return (
         <div className="fixed inset-0 z-[110] bg-[#1a1a1a] flex flex-col font-sans text-white animate-in grow-in duration-200">
             {/* Top Navigation Bar */}
@@ -584,7 +795,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
 
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => onSave(currentImage)}
+                        onClick={handleSave}
                         className="px-8 py-2 bg-[#93B719] hover:bg-[#a6cd1d] text-white font-bold rounded shadow-lg transition-all transform hover:scale-105 active:scale-95"
                     >
                         保存
@@ -708,6 +919,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                         <button
                             onClick={() => {
                                 setCropRatio('custom');
+                                setCropBox({ left: 0, top: 0, width: 0, height: 0 });
                                 setActiveTool('none');
                             }}
                             className="text-[11px] font-bold text-gray-400 hover:text-gray-200 transition-colors"
@@ -841,9 +1053,165 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                 </div>
             )}
 
+            {/* Text Tool Sub-Toolbar */}
+            {activeTool === 'text' && (
+                <div className="h-[100px] bg-[#2d2d2d] border-b border-white/5 flex flex-col items-center justify-center gap-3 grow-in animate-in px-8">
+                    <div className="flex items-center gap-8 text-[11px] font-bold w-full justify-center">
+                        {/* Text Effects */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setTextBold(!textBold)}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textBold ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="太字"
+                            >
+                                <Bold size={18} />
+                            </button>
+                            <button
+                                onClick={() => setTextItalic(!textItalic)}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textItalic ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="斜体"
+                            >
+                                <Italic size={18} />
+                            </button>
+                            <button
+                                onClick={() => setTextUnderline(!textUnderline)}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textUnderline ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="下線"
+                            >
+                                <Underline size={18} />
+                            </button>
+                        </div>
+
+                        <div className="w-px h-6 bg-white/10" />
+
+                        {/* Text Alignment */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setTextAlign('left')}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textAlign === 'left' ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="左揃え"
+                            >
+                                <AlignLeft size={18} />
+                            </button>
+                            <button
+                                onClick={() => setTextAlign('center')}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textAlign === 'center' ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="中央揃え"
+                            >
+                                <AlignCenter size={18} />
+                            </button>
+                            <button
+                                onClick={() => setTextAlign('right')}
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${textAlign === 'right' ? 'bg-[#93B719] text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}`}
+                                title="右揃え"
+                            >
+                                <AlignRight size={18} />
+                            </button>
+                        </div>
+
+                        <div className="w-px h-6 bg-white/10" />
+
+                        {/* Text Color Picker */}
+                        <div className="flex flex-col items-center gap-1 relative">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowTextColorPicker(!showTextColorPicker)}
+                                    className="w-8 h-8 rounded-full border border-white/20 shadow-lg flex items-center justify-center relative overflow-hidden transition-transform hover:scale-110 active:scale-95"
+                                >
+                                    <div className="absolute inset-0" style={{ backgroundColor: textColor === 'transparent' ? 'white' : textColor }} />
+                                    {textColor === 'transparent' && (
+                                        <div className="absolute inset-0 bg-white flex items-center justify-center">
+                                            <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                        </div>
+                                    )}
+                                </button>
+                            </div>
+                            <span className="text-gray-500">色</span>
+
+                            {showTextColorPicker && (
+                                <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.3)] p-4 w-[280px] z-[120] animate-in slide-in-from-top-2">
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            {colorPresets.map((row, i) => (
+                                                <div key={i} className="flex justify-between">
+                                                    {row.map(color => (
+                                                        <button
+                                                            key={color}
+                                                            onClick={() => {
+                                                                setTextColor(color);
+                                                                setShowTextColorPicker(false);
+                                                            }}
+                                                            className={`w-6 h-6 rounded-full border-2 transition-all hover:scale-110 relative ${textColor === color ? 'border-[#00a9ff] scale-110' : 'border-black/5'}`}
+                                                            style={{ backgroundColor: color === 'transparent' ? 'white' : color }}
+                                                        >
+                                                            {color === 'transparent' && (
+                                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                                    <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                                                </div>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="h-px bg-gray-100" />
+
+                                        <div className="flex items-center gap-3 bg-gray-50 p-2 rounded border border-gray-200">
+                                            <div className="w-8 h-8 rounded-full border border-black/10 shadow-inner" style={{ backgroundColor: textColor === 'transparent' ? 'white' : textColor }}>
+                                                {textColor === 'transparent' && (
+                                                    <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
+                                                        <div className="w-full h-[1px] bg-red-500 rotate-45" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 flex items-center gap-1">
+                                                <span className="text-gray-400 text-sm font-medium">#</span>
+                                                <input
+                                                    type="text"
+                                                    value={textColor.startsWith('#') ? textColor.slice(1).toUpperCase() : ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value.replace(/[^0-9A-Fa-f]/g, '');
+                                                        if (val.length <= 6) {
+                                                            setTextColor(`#${val}`);
+                                                        }
+                                                    }}
+                                                    placeholder="FFFFFF"
+                                                    className="w-full bg-transparent border-none p-0 text-sm font-bold text-gray-700 focus:ring-0 uppercase placeholder:text-gray-300"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* Arrow */}
+                                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45" />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Font Size Slider */}
+                    <div className="flex items-center gap-6 w-full max-w-[600px]">
+                        <span className="text-[11px] font-bold text-gray-500 whitespace-nowrap">文字のサイズ</span>
+                        <input
+                            type="range"
+                            min="10"
+                            max="200"
+                            value={textSize}
+                            onChange={(e) => setTextSize(parseInt(e.target.value))}
+                            className="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[#00a9ff]"
+                        />
+                        <div className="w-14 h-6 bg-black/40 rounded border border-white/10 flex items-center justify-center text-[11px] font-bold">
+                            {textSize}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Editing Canvas Area */}
             <div
-                className={`flex-1 bg-[#151515] flex items-center justify-center p-12 overflow-hidden relative ${activeTool === 'crop' && cropRatio === 'custom' ? 'cursor-crosshair' : ''}`}
+                className={`flex-1 bg-[#151515] flex items-center justify-center p-12 overflow-hidden relative ${activeTool === 'crop' && cropRatio === 'custom' ? 'cursor-crosshair' :
+                    activeTool === 'text' ? 'cursor-text' : ''
+                    }`}
                 onMouseDown={handleEditorMouseDown}
                 onMouseMove={handleEditorMouseMove}
                 onMouseUp={handleEditorMouseUp}
@@ -867,6 +1235,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                         alt="Editing"
                         onLoad={handleImageLoad}
                         className="w-full h-full select-none transition-all duration-300"
+                        crossOrigin="anonymous"
                     />
 
                     <canvas
@@ -958,6 +1327,118 @@ export default function ImageEditorModal({ isOpen, onClose, imageUrl, onSave }: 
                             </div>
                         </div>
                     )}
+
+                    {/* Text Objects */}
+                    {(() => {
+                        console.log('Rendering text objects:', textObjects, 'editingTextId:', editingTextId);
+                        return null;
+                    })()}
+                    {textObjects.map((textObj) => (
+                        <div
+                            key={textObj.id}
+                            className="absolute pointer-events-auto"
+                            style={{
+                                left: `${textObj.x}%`,
+                                top: `${textObj.y}%`,
+                                transform: 'translate(-50%, -50%)',
+                                zIndex: 100
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
+                            {editingTextId === textObj.id ? (
+                                <input
+                                    ref={textInputRef}
+                                    type="text"
+                                    value={textObj.text}
+                                    onChange={(e) => {
+                                        setTextObjects(textObjects.map(t =>
+                                            t.id === textObj.id ? { ...t, text: e.target.value } : t
+                                        ));
+                                    }}
+                                    onMouseDown={(e) => {
+                                        e.stopPropagation();
+                                    }}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                    }}
+                                    onBlur={(e) => {
+                                        // Delay blur to prevent immediate closing
+                                        setTimeout(() => {
+                                            if (!textObj.text.trim()) {
+                                                // Remove empty text objects
+                                                setTextObjects(textObjects.filter(t => t.id !== textObj.id));
+                                            }
+                                            setEditingTextId(null);
+                                        }, 100);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.currentTarget.blur();
+                                        } else if (e.key === 'Escape') {
+                                            setTextObjects(textObjects.filter(t => t.id !== textObj.id));
+                                            setEditingTextId(null);
+                                        }
+                                    }}
+                                    className="bg-white/10 border-2 border-[#93B719] outline-none text-white px-2 py-1 rounded"
+                                    style={{
+                                        fontSize: `${textObj.size}px`,
+                                        color: textObj.color,
+                                        fontWeight: textObj.bold ? 'bold' : 'normal',
+                                        fontStyle: textObj.italic ? 'italic' : 'normal',
+                                        textDecoration: textObj.underline ? 'underline' : 'none',
+                                        textAlign: textObj.align,
+                                        minWidth: '200px',
+                                        width: 'auto',
+                                        textShadow: '0 0 4px rgba(0,0,0,0.8)',
+                                        zIndex: 1000
+                                    }}
+                                    placeholder="テキストを入力"
+                                    autoFocus
+                                />
+                            ) : (
+                                <div
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingTextId(textObj.id);
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="cursor-text relative group"
+                                    style={{
+                                        fontSize: `${textObj.size}px`,
+                                        color: textObj.color,
+                                        fontWeight: textObj.bold ? 'bold' : 'normal',
+                                        fontStyle: textObj.italic ? 'italic' : 'normal',
+                                        textDecoration: textObj.underline ? 'underline' : 'none',
+                                        textAlign: textObj.align,
+                                        minWidth: '100px',
+                                        textShadow: '0 0 4px rgba(0,0,0,0.8)',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Delete' || e.key === 'Backspace') {
+                                            e.preventDefault();
+                                            setTextObjects(textObjects.filter(t => t.id !== textObj.id));
+                                        }
+                                    }}
+                                    tabIndex={0}
+                                >
+                                    {textObj.text || 'テキストを入力'}
+                                    {/* Delete button - shows on hover */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setTextObjects(textObjects.filter(t => t.id !== textObj.id));
+                                        }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="削除"
+                                    >
+                                        <X size={12} className="text-white" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
                 </div>
 
                 {/* Status Bar / Info */}

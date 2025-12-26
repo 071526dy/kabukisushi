@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Settings,
@@ -26,6 +26,7 @@ import {
 import { LandingPage } from '../../pages/LandingPage';
 import ImageAssetLibrary from '../components/editor/ImageAssetLibrary';
 import ImageEditorModal from '../components/editor/ImageEditorModal';
+import AddSectionModal from '../components/editor/AddSectionModal';
 
 export type BackgroundType = 'color' | 'image' | 'video';
 
@@ -33,6 +34,18 @@ export interface BackgroundConfig {
     type: BackgroundType;
     value: string;
     overlay?: number;
+    originalUrl?: string;
+    backgroundMode?: 'cover' | 'contain' | 'tile' | 'center';
+    overlayOpacity?: number; // 0 to 100
+    textTheme?: 'light' | 'dark';
+}
+
+export interface LayoutConfig {
+    width: 'auto' | 'full' | 'wide' | 'normal' | 'small';
+    alignment: 'top' | 'center' | 'bottom';
+    fullHeight: boolean;
+    topSpace: boolean;
+    bottomSpace: boolean;
 }
 
 export default function EditorPage() {
@@ -45,6 +58,7 @@ export default function EditorPage() {
     const [activeBackgroundTab, setActiveBackgroundTab] = useState<BackgroundType>('image');
     const [showAssetLibrary, setShowAssetLibrary] = useState(false);
     const [showImageEditor, setShowImageEditor] = useState(false);
+    const [showAddSectionModal, setShowAddSectionModal] = useState(false);
     const [editingImage, setEditingImage] = useState<string>('');
 
     // Background settings state
@@ -56,6 +70,17 @@ export default function EditorPage() {
         menu: { type: 'color', value: '#f5f5f5' },
         affiliated: { type: 'image', value: 'https://images.unsplash.com/photo-1700324822763-956100f79b0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920&auto=format&q=80' },
         footer: { type: 'color', value: '#1C1C1C' }
+    });
+
+    // Layout settings state
+    const [layoutSettings, setLayoutSettings] = useState<Record<string, LayoutConfig>>({
+        home: { width: 'full', alignment: 'center', fullHeight: true, topSpace: false, bottomSpace: false },
+        about: { width: 'normal', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true },
+        gallery: { width: 'wide', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true },
+        access: { width: 'normal', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true },
+        menu: { width: 'normal', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true },
+        affiliated: { width: 'full', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true },
+        footer: { width: 'wide', alignment: 'center', fullHeight: false, topSpace: true, bottomSpace: true }
     });
 
 
@@ -87,7 +112,11 @@ export default function EditorPage() {
 
     const handleImageSelect = (url: string) => {
         if (backgroundEditSection) {
-            updateBackground(backgroundEditSection, { type: 'image', value: url });
+            updateBackground(backgroundEditSection, {
+                type: 'image',
+                value: url,
+                originalUrl: url // Store original URL when selecting new image
+            });
         }
         setShowAssetLibrary(false);
     };
@@ -104,11 +133,75 @@ export default function EditorPage() {
 
     const handleImageSave = (editedUrl: string) => {
         if (backgroundEditSection) {
-            updateBackground(backgroundEditSection, { type: 'image', value: editedUrl });
+            const currentConfig = backgroundSettings[backgroundEditSection];
+            // Preserve original URL if it exists, otherwise set current value as original
+            const originalUrl = currentConfig?.originalUrl || currentConfig?.value;
+
+            updateBackground(backgroundEditSection, {
+                type: 'image',
+                value: editedUrl,
+                originalUrl: originalUrl
+            });
         }
         setShowImageEditor(false);
     };
 
+    const handleDeleteBackground = () => {
+        if (backgroundEditSection) {
+            setBackgroundSettings(prev => {
+                const newSettings = { ...prev };
+                delete newSettings[backgroundEditSection];
+                return newSettings;
+            });
+            setShowBackgroundPanel(false);
+        }
+    };
+
+    const handleSaveBackground = () => {
+        // Save settings to localStorage
+        localStorage.setItem('site_background_settings', JSON.stringify(backgroundSettings));
+        localStorage.setItem('site_layout_settings', JSON.stringify(layoutSettings));
+
+        // Show success message or feedback if needed (optional, existing UI has a static "Saved" indicator)
+        // For now just close the panel
+        setShowBackgroundPanel(false);
+
+        // Also trigger a window event so other components (if in same window) know to update, 
+        // though for separate tab/window reload is needed.
+        window.dispatchEvent(new Event('storage'));
+
+        // Force update the timestamp to show "Just now"
+        // This is a mock interaction since the UI is static
+    };
+
+    // Initialize from localStorage on mount
+    useEffect(() => {
+        const savedBackgrounds = localStorage.getItem('site_background_settings');
+        const savedLayouts = localStorage.getItem('site_layout_settings');
+
+        if (savedBackgrounds) {
+            try {
+                setBackgroundSettings(JSON.parse(savedBackgrounds));
+            } catch (e) {
+                console.error('Failed to parse saved background settings', e);
+            }
+        }
+
+        if (savedLayouts) {
+            try {
+                setLayoutSettings(JSON.parse(savedLayouts));
+            } catch (e) {
+                console.error('Failed to parse saved layout settings', e);
+            }
+        }
+    }, []);
+
+    const handleLayoutChange = (sectionId: string, config: Partial<LayoutConfig>) => {
+        setLayoutSettings(prev => ({
+            ...prev,
+            [sectionId]: { ...prev[sectionId], ...config }
+        }));
+    };
 
     const sections = [
         { id: 'home', label: 'HOME' },
@@ -247,7 +340,10 @@ export default function EditorPage() {
 
                     {/* Add New Section Button */}
                     <div className="p-3">
-                        <button className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-700 rounded-lg text-gray-500 hover:border-[#88c057] hover:text-[#88c057] transition-all hover:bg-[#88c057]/5 group">
+                        <button
+                            onClick={() => setShowAddSectionModal(true)}
+                            className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-700 rounded-lg text-gray-500 hover:border-[#88c057] hover:text-[#88c057] transition-all hover:bg-[#88c057]/5 group"
+                        >
                             <Plus size={16} className="group-hover:scale-110 transition-transform" />
                             <span className="text-[11px] font-bold">セクションを追加</span>
                         </button>
@@ -296,20 +392,35 @@ export default function EditorPage() {
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         {activeBackgroundTab === 'color' && (
-                            <div className="grid grid-cols-4 gap-2">
-                                {[
-                                    '#ffffff', '#f8f9fa', '#e9ecef', '#dee2e6',
-                                    '#343a40', '#212529', '#fcebc5', '#deb55a',
-                                    '#ffefef', '#ffe0e0', '#ffccd5', '#ffb3c1',
-                                    '#e7f5ff', '#d0ebff', '#a5d8ff', '#74c0fc'
-                                ].map((color) => (
-                                    <button
-                                        key={color}
-                                        onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { type: 'color', value: color })}
-                                        className={`aspect-square rounded shadow-inner border-2 ${backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === color ? 'border-blue-500' : 'border-black/20'}`}
-                                        style={{ backgroundColor: color }}
-                                    />
-                                ))}
+                            <div className="h-full flex flex-col">
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[
+                                        '#ffffff', '#f8f9fa', '#e9ecef', '#dee2e6',
+                                        '#343a40', '#212529', '#fcebc5', '#deb55a',
+                                        '#ffefef', '#ffe0e0', '#ffccd5', '#ffb3c1',
+                                        '#e7f5ff', '#d0ebff', '#a5d8ff', '#74c0fc'
+                                    ].map((color) => (
+                                        <button
+                                            key={color}
+                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { type: 'color', value: color })}
+                                            className={`aspect-square rounded shadow-inner border-2 ${backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === color ? 'border-blue-500' : 'border-black/20'}`}
+                                            style={{ backgroundColor: color }}
+                                        />
+                                    ))}
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t border-black/10">
+                                    <label className="flex items-center justify-center gap-2 w-full py-2 bg-[#3d3d3d] hover:bg-[#4d4d4d] rounded text-[11px] font-bold transition-all cursor-pointer">
+                                        <Palette size={14} className="text-gray-400" />
+                                        <span className="text-gray-300">カスタム</span>
+                                        <input
+                                            type="color"
+                                            className="sr-only"
+                                            onChange={(e) => backgroundEditSection && updateBackground(backgroundEditSection, { type: 'color', value: e.target.value })}
+                                            value={backgroundEditSection && backgroundSettings[backgroundEditSection]?.type === 'color' ? backgroundSettings[backgroundEditSection].value : '#ffffff'}
+                                        />
+                                    </label>
+                                </div>
                             </div>
                         )}
 
@@ -328,7 +439,13 @@ export default function EditorPage() {
                                             onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { type: 'image', value: url })}
                                             className={`aspect-video rounded bg-gray-800 border transition-all cursor-pointer hover:border-blue-400 ${backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === url ? 'border-blue-500 ring-1 ring-blue-500' : 'border-transparent opacity-60 hover:opacity-100'}`}
                                             style={{ backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                                        />
+                                        >
+                                            {backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === url && (
+                                                <div className="absolute top-1 right-1 w-4 h-4 bg-blue-500 rounded-full border border-white flex items-center justify-center">
+                                                    <span className="text-[8px] text-white">✓</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     ))}
                                     <button
                                         onClick={() => setShowAssetLibrary(true)}
@@ -345,13 +462,173 @@ export default function EditorPage() {
                                 >
                                     画像アップロード
                                 </button>
+
+                                {backgroundEditSection && (
+                                    <>
+                                        {/* Display Mode Selection */}
+                                        <div className="pt-2 border-t border-black/10">
+                                            <span className="text-[10px] font-bold text-gray-400 block mb-2">表示調整</span>
+                                            <div className="grid grid-cols-4 gap-1 p-1 bg-black/20 rounded">
+                                                {[
+                                                    { id: 'cover', label: '拡大' },
+                                                    { id: 'contain', label: '全体' },
+                                                    { id: 'tile', label: 'タイル' },
+                                                    { id: 'center', label: '中央' },
+                                                ].map(mode => (
+                                                    <button
+                                                        key={mode.id}
+                                                        onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { backgroundMode: mode.id as any })}
+                                                        className={`py-1.5 text-[10px] rounded transition-colors ${(backgroundSettings[backgroundEditSection]?.backgroundMode || 'cover') === mode.id
+                                                            ? 'bg-gray-600 text-white shadow-sm'
+                                                            : 'text-gray-400 hover:text-gray-200'
+                                                            }`}
+                                                    >
+                                                        {mode.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Text Color / Overlay Selection */}
+                                        <div className="pt-2">
+                                            <span className="text-[10px] font-bold text-gray-400 block mb-2">文字色・オーバーレイ（スモーク）</span>
+                                            <div className="space-y-2">
+                                                {/* Text Color */}
+                                                <div className="bg-black/20 p-2 rounded">
+                                                    <span className="text-[10px] text-gray-500 mb-1 block">文字色</span>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { textTheme: 'light' })}
+                                                            className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${backgroundSettings[backgroundEditSection]?.textTheme === 'light'
+                                                                ? 'bg-white border-white text-black'
+                                                                : 'bg-transparent border-gray-600 text-gray-400 hover:border-gray-400'
+                                                                }`}
+                                                        >
+                                                            白文字
+                                                        </button>
+                                                        <button
+                                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { textTheme: 'dark' })}
+                                                            className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${backgroundSettings[backgroundEditSection]?.textTheme === 'dark'
+                                                                ? 'bg-black border-black text-white'
+                                                                : 'bg-transparent border-gray-600 text-gray-400 hover:border-gray-400'
+                                                                }`}
+                                                        >
+                                                            黒文字
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Overlay (Smoke) Toggle */}
+                                                <div className="bg-black/20 p-2 rounded">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-[10px] text-gray-500">背景のスモーク（暗くする）</span>
+                                                        <span className="text-[10px] font-bold text-white">
+                                                            {(backgroundSettings[backgroundEditSection]?.overlayOpacity || 0) > 0 ? 'ON' : 'OFF'}
+                                                        </span>
+                                                    </div>
+
+                                                    {(backgroundSettings[backgroundEditSection]?.overlayOpacity || 0) > 0 ? (
+                                                        <button
+                                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { overlayOpacity: 0 })}
+                                                            className="w-full py-2 bg-red-500/80 hover:bg-red-500 text-white rounded text-[11px] font-bold transition-all flex items-center justify-center gap-2"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                            スモークを削除する
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { overlayOpacity: 50 })}
+                                                            className="w-full py-2 bg-blue-500/80 hover:bg-blue-500 text-white rounded text-[11px] font-bold transition-all flex items-center justify-center gap-2"
+                                                        >
+                                                            <Plus size={12} />
+                                                            スモークを追加する
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {backgroundEditSection &&
+                                    backgroundSettings[backgroundEditSection]?.originalUrl &&
+                                    backgroundSettings[backgroundEditSection]?.value !== backgroundSettings[backgroundEditSection]?.originalUrl && (
+                                        <button
+                                            onClick={() => {
+                                                const originalUrl = backgroundSettings[backgroundEditSection]?.originalUrl;
+                                                if (originalUrl) {
+                                                    updateBackground(backgroundEditSection, {
+                                                        type: 'image',
+                                                        value: originalUrl
+                                                    });
+                                                }
+                                            }}
+                                            className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded text-[11px] font-bold transition-all flex items-center justify-center gap-2 border border-blue-500/30"
+                                        >
+                                            <Undo size={14} />
+                                            オリジナルに戻す
+                                        </button>
+                                    )}
                             </div>
                         )}
 
                         {activeBackgroundTab === 'video' && (
-                            <div className="flex flex-col items-center justify-center py-8 text-center bg-black/20 rounded border border-dashed border-gray-700">
-                                <Video size={24} className="text-gray-600 mb-2" />
-                                <span className="text-xs text-gray-500 px-4">動画背景は今後のアップデートで追加されます</span>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        'https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3', // Concert/Crowd
+                                        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3', // DJ/Music
+                                        'https://images.unsplash.com/photo-1514525253440-b393452e3383?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3', // Nightlife
+                                        'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3'  // Party
+                                    ].map((url, i) => (
+                                        <div
+                                            key={i}
+                                            onClick={() => backgroundEditSection && updateBackground(backgroundEditSection, { type: 'video', value: url })}
+                                            className={`aspect-video rounded bg-gray-800 border transition-all cursor-pointer relative group ${backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === url ? 'border-blue-500 ring-1 ring-blue-500' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                                            style={{ backgroundImage: `url(${url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                                        >
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="w-8 h-8 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm group-hover:bg-[#88c057] transition-colors">
+                                                    <Video size={14} className="text-white fill-white" />
+                                                </div>
+                                            </div>
+                                            {backgroundEditSection && backgroundSettings[backgroundEditSection]?.value === url && (
+                                                <div className="absolute top-1 right-1 w-4 h-4 bg-blue-500 rounded-full border border-white flex items-center justify-center">
+                                                    <span className="text-[8px] text-white">✓</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <button
+                                        onClick={() => setShowAssetLibrary(true)}
+                                        className="aspect-video rounded border border-dashed border-gray-700 flex flex-col items-center justify-center gap-1 hover:border-gray-500 bg-white/5 group"
+                                    >
+                                        <Plus size={14} className="text-gray-500 group-hover:text-gray-300" />
+                                        <span className="text-[10px] text-gray-500">その他</span>
+                                    </button>
+                                </div>
+
+                                <div className="space-y-2 pt-4 border-t border-black/10">
+                                    <label className="text-[10px] text-gray-400 font-bold flex items-center gap-2">
+                                        <Video size={12} />
+                                        動画を埋め込む
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="YouTube, Vimeo URL"
+                                        className="w-full bg-[#1C1C1C] border border-gray-700 rounded px-3 py-2 text-xs text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (backgroundEditSection && val) {
+                                                updateBackground(backgroundEditSection, { type: 'video', value: val });
+                                            }
+                                        }}
+                                        defaultValue={backgroundEditSection && backgroundSettings[backgroundEditSection]?.type === 'video' ? backgroundSettings[backgroundEditSection].value : ''}
+                                    />
+                                    <div className="text-[10px] text-gray-500 text-left">
+                                        YouTube, Vimeo などのURLを貼り付けて動画を背景に設定できます。
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -373,12 +650,15 @@ export default function EditorPage() {
                             <ImageIcon size={14} />
                             画像を編集
                         </button>
-                        <button className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-[11px] font-bold transition-colors flex items-center justify-center gap-2">
+                        <button
+                            onClick={handleDeleteBackground}
+                            className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded text-[11px] font-bold transition-colors flex items-center justify-center gap-2"
+                        >
                             <Trash2 size={12} />
                             削除
                         </button>
                         <button
-                            onClick={() => setShowBackgroundPanel(false)}
+                            onClick={handleSaveBackground}
                             className="w-full py-2 bg-[#88c057] hover:bg-[#7ab04a] text-white rounded text-[11px] font-bold transition-colors shadow-lg"
                         >
                             保存
@@ -450,6 +730,8 @@ export default function EditorPage() {
                                     onBackgroundEdit={handleBackgroundEdit}
                                     activeSection={activeSection || undefined}
                                     backgroundSettings={backgroundSettings}
+                                    layoutSettings={layoutSettings}
+                                    onLayoutChange={handleLayoutChange}
                                 />
                             </div>
                         </div>
@@ -461,6 +743,7 @@ export default function EditorPage() {
                 isOpen={showAssetLibrary}
                 onClose={() => setShowAssetLibrary(false)}
                 onSelect={handleImageSelect}
+                mediaType={activeBackgroundTab === 'video' ? 'video' : 'image'}
             />
             {/* Image Editor Modal */}
             <ImageEditorModal
@@ -468,6 +751,16 @@ export default function EditorPage() {
                 onClose={() => setShowImageEditor(false)}
                 imageUrl={editingImage}
                 onSave={handleImageSave}
+            />
+
+            {/* Add Section Modal */}
+            <AddSectionModal
+                isOpen={showAddSectionModal}
+                onClose={() => setShowAddSectionModal(false)}
+                onAdd={(category, type) => {
+                    console.log('Add section:', category, type);
+                    setShowAddSectionModal(false);
+                }}
             />
         </div>
     );
