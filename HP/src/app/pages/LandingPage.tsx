@@ -43,9 +43,9 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
     const [localLayoutSettings, setLocalLayoutSettings] = useState<Record<string, LayoutConfig> | undefined>(undefined);
 
     // Use props if available (editing mode), otherwise use local state (public mode)
-    // If local state is still undefined, use the hardcoded defaults
-    const backgroundSettings = propBackgroundSettings || localBackgroundSettings || DEFAULT_BACKGROUND_SETTINGS;
-    const layoutSettings = propLayoutSettings || localLayoutSettings || DEFAULT_LAYOUT_SETTINGS;
+    // Merge with defaults to ensure new defaults (like images) are used if not explicitly overridden in local state
+    const backgroundSettings = propBackgroundSettings || (localBackgroundSettings ? { ...DEFAULT_BACKGROUND_SETTINGS, ...localBackgroundSettings } : DEFAULT_BACKGROUND_SETTINGS);
+    const layoutSettings = propLayoutSettings || (localLayoutSettings ? { ...DEFAULT_LAYOUT_SETTINGS, ...localLayoutSettings } : DEFAULT_LAYOUT_SETTINGS);
 
     // Load settings from localStorage if on public page
     useEffect(() => {
@@ -55,7 +55,16 @@ export function LandingPage({ isEditing = false, onSectionSelect, onBackgroundEd
 
             if (savedBackgrounds) {
                 try {
-                    setLocalBackgroundSettings(JSON.parse(savedBackgrounds));
+                    const parsed = JSON.parse(savedBackgrounds);
+                    // Migration: Remove old Unsplash default URLs so they fall back to the new hardcoded defaults
+                    const oldUnsplashUrl = 'https://images.unsplash.com/photo-1700324822763-956100f79b0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1920&auto=format&q=80';
+                    if (parsed.affiliated && parsed.affiliated.value === oldUnsplashUrl) {
+                        delete parsed.affiliated;
+                    }
+                    if (parsed.home && (parsed.home.value === '/assets/home_hero.jpg' || parsed.home.value === 'https://images.unsplash.com/photo-1700324822763-956100f79b0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400&q=80')) {
+                        delete parsed.home;
+                    }
+                    setLocalBackgroundSettings(parsed);
                 } catch (e) {
                     console.error('Failed to parse saved background settings', e);
                 }
